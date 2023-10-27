@@ -1,0 +1,369 @@
+library(circular)
+library(Directional)
+library(CircStats)
+library(ggplot2)
+library(solarPos)
+library(maps)
+library(ggOceanMaps)
+library(lubridate)
+
+whale = read.csv("D:/Downloads/Blue whales Eastern North Pacific 1993-2008 - Argos Data.csv")
+head(whale)
+watson.test(whale$location.long, alpha = 0.01, dist = "vonmises")
+watson.test(whale$location.lat, alpha = 0.01, dist = "vonmises")
+
+world_map = map_data("world")
+northern_map <- subset(world_map, long >-180)
+northern_map1 <- subset(northern_map , long <180)
+northern_map2 <- subset(northern_map1 , lat >= 0)
+northern_map3 <- subset(northern_map2 , lat <= 65)
+
+ggplot() +
+  geom_map(
+    data = northern_map3,map = northern_map3,
+    aes(long, lat , map_id = region),
+    color = "black" , fill = "lightblue"
+  ) +
+  geom_point(
+    data = whale,
+    aes(location.long , location.lat , color = "red",
+    ) ,
+    alpha = 1, size = 0.5
+  ) +
+  theme(legend.position = "top")
+
+whale$timestamp <- as.Date(whale$timestamp)
+
+# Extract year, month, and day components
+whale$year <- format(whale$timestamp, "%Y")
+
+
+whale$year = as.numeric(whale$year)
+
+# Convert the date string to a POSIXlt object
+date_obj <- as.POSIXlt(whale$timestamp)
+
+# Extract the day of the year
+whale$yearly_day <- date_obj$yday + 1
+
+
+whale$yearly_date = whale$yearly_day/365
+whale$year = as.numeric(whale$year)
+whale$Annualized_time = (whale$year + whale$yearly_date)
+
+whale$Annualized_time
+whale$height = 0
+library(wmm)
+head(whale)
+dim(whale)
+
+whale_data = whale[,c(3:5,22, 23,26)]
+head(whale_data)
+dim(whale_data)
+library(lubridate)
+filtered_whale_data <-  subset(whale_data, whale_data$year >= 2005 & whale_data$year <= 2010)
+
+# Print the filtered dataset
+print(filtered_whale_data)
+summary(filtered_whale_data)
+dim(filtered_whale_data)
+
+head(filtered_whale_data)
+dim(filtered_whale_data)
+
+mag = list()
+for (i in 1:8326) {
+  mag[[i]] = data.frame(GetMagneticFieldWMM(lon = filtered_whale_data$location.long[i], 
+                                            lat =  filtered_whale_data$location.lat[i], 
+                                            height =  filtered_whale_data$height[i], 
+                                            time =  filtered_whale_data$Annualized_time[i], 
+                                            wmmVersion = "WMM2005"))
+}
+
+mage_data = data.frame(t(sapply(mag,c)))
+head(mage_data)
+magnetic_dta = mage_data[,c(1:3, 7:10)]
+head(magnetic_dta)
+
+combined_final_whale_data = cbind(filtered_whale_data, magnetic_dta)
+tail(combined_final_whale_data)
+
+
+combined_final_whale_data <- combined_final_whale_data[combined_final_whale_data$location.long <= 0, ]
+
+get_initial_bearing <- function(longA, latA, longB, latB) {
+  delta_long <- longB - longA
+  rad_latA <- latA * (pi / 180)  
+  rad_latB <- latB * (pi / 180)  
+  
+  bearing <- atan2(sin(delta_long) * cos(rad_latB), cos(rad_latA) * sin(rad_latB) - sin(rad_latA) * cos(rad_latB) * cos(delta_long))
+  bearing_degrees <- bearing * (180 / pi)  
+  
+  return(bearing_degrees)
+}
+dim(combined_final_whale_data)
+
+for ( i in 1:8324) {
+  combined_final_whale_data$theta[i] = 
+    get_initial_bearing(combined_final_whale_data$location.long[i] ,
+                        combined_final_whale_data$location.lat[i],
+                        combined_final_whale_data$location.long[i+1],
+                        combined_final_whale_data$location.lat[i+1] )
+}
+
+head(combined_final_whale_data)
+tail(combined_final_whale_data)
+
+combined_final_whale_data$i = as.numeric(combined_final_whale_data$i)
+combined_final_whale_data$d = as.numeric(combined_final_whale_data$d)
+
+for ( i in 1:8324) {
+  combined_final_whale_data$del_i[i] = 
+    (combined_final_whale_data$i[i+1] -  
+       combined_final_whale_data$i[i])
+}
+
+for ( i in 1:8324) {
+  combined_final_whale_data$del_d[i] = 
+    (combined_final_whale_data$d[i+1] -  
+       combined_final_whale_data$d[i])
+}
+
+
+fit1 = lm.circular(combined_final_whale_data$theta, combined_final_whale_data$del_i)
+fit1$rho
+
+fit2 = lm.circular(combined_final_whale_data$theta, combined_final_whale_data$del_d)
+fit2$rho
+
+library(solarPos)
+combined_final_whale_data$month <- format(combined_final_whale_data$timestamp, "%m")
+combined_final_whale_data$day <- format(combined_final_whale_data$timestamp, "%d")
+
+combined_final_whale_data$year = as.numeric(combined_final_whale_data$year)
+combined_final_whale_data$month = as.numeric(combined_final_whale_data$month)
+combined_final_whale_data$day = as.numeric(combined_final_whale_data$day)
+
+combined_final_whale_data$jd = solarPos::julianDay(
+  combined_final_whale_data$year, combined_final_whale_data$month, 
+  combined_final_whale_data$day
+)
+
+x = solarPos::solarPosition(combined_final_whale_data$jd,
+                            combined_final_whale_data$location.long,
+                            combined_final_whale_data$location.lat
+)
+head(x)
+x = data.frame(x)
+
+combined_final_whale_data$azimuth = x$azimuth
+combined_final_whale_data$zenith = x$zenith
+
+for ( i in 1:8324) {
+  combined_final_whale_data$del_solar_azimuth[i] = 
+    (combined_final_whale_data$azimuth[i+1] -  
+       combined_final_whale_data$azimuth[i])
+}
+
+for ( i in 1:8324) {
+  combined_final_whale_data$del_solar_zenith[i] = 
+    (combined_final_whale_data$zenith[i+1] -  
+       combined_final_whale_data$zenith[i])
+}
+
+
+fit3 = lm.circular(combined_final_whale_data$theta, combined_final_whale_data$del_solar_azimuth)
+fit4 = lm.circular(combined_final_whale_data$theta, combined_final_whale_data$del_solar_zenith)
+
+
+fit3$rho
+fit4$rho
+
+library(suncalc)
+data = data.frame(date = combined_final_whale_data$timestamp
+                  , lat = combined_final_whale_data$location.lat ,
+                  lon = combined_final_whale_data$location.long)
+s = suncalc::getMoonPosition(data = data, keep = c("azimuth"))
+
+combined_final_whale_data$moon_pos = s$azimuth
+
+for ( i in 1:8324) {
+  combined_final_whale_data$del_lunar_azimuth[i] = 
+    (combined_final_whale_data$moon_pos[i+1] -  
+       combined_final_whale_data$moon_pos[i])
+}
+
+fit5 = lm.circular(combined_final_whale_data$theta, combined_final_whale_data$del_lunar_azimuth)
+fit5$rho
+
+
+summary(combined_final_whale_data)
+watson.test(combined_final_whale_data$location.long, alpha = 0.01, dist = "vonmises")
+watson.test(combined_final_whale_data$location.lat, alpha = 0.01, dist = "vonmises")
+watson.test(combined_final_whale_data$azimuth, alpha = 0.01, dist = "vonmises")
+watson.test(combined_final_whale_data$zenith, alpha = 0.01, dist = "vonmises")
+watson.test(combined_final_whale_data$moon_pos, alpha = 0.01, dist = "vonmises")
+watson.test(combined_final_whale_data$theta, alpha = 0.01, dist = "vonmises")
+watson.test(combined_final_whale_data$i, alpha = 0.01, dist = "vonmises")
+watson.test(combined_final_whale_data$d, alpha = 0.01, dist = "vonmises")
+
+remotes::install_github("MikkoVihtakari/ggOceanMaps")
+library(ggOceanMaps)
+
+dt <- data.frame(lon = combined_final_whale_data$location.long,
+                 lat = combined_final_whale_data$location.lat)
+
+basemap(data = dt, bathymetry = T, land.col = "green4") + 
+  geom_point(data = transform_coord(dt), aes(x = lon, y = lat), 
+             color = "red", fill = NA, size = 1)+
+  theme(legend.position = "bottom")
+
+
+dd = cbind(combined_final_whale_data$location.lat, combined_final_whale_data$location.long)
+
+library(movMF)
+
+Evmf <- function(K){
+  movMF(dd, k= K, control = list(nruns = 20))
+}
+
+set.seed(123)
+Esd = lapply(1:10, Evmf)
+Esd
+sapply(Esd, BIC)
+
+# nOW WE USE 16000 SAMPLES TO PLOT
+
+vmf_density_grid = function(u, ngrid = 100){
+  u[,1] <- u[,1] + 90
+  u[,2] <- u[,2] +180
+  res <- vmf.kerncontour(u, thumb = "none", den.ret = T, full = T,
+                         ngrid = ngrid)
+  ret <- expand.grid(Lat = res$lat - 90, Long = res$long - 180)
+  ret$Density <- c(res$den)
+  ret
+}
+
+
+whale.dens = vmf_density_grid(dd, ngrid = 300)
+
+
+
+basemap(data = dt, bathymetry = T, land.col = "green4") +
+  geom_point(data = combined_final_whale_data,
+             mapping = aes(x = location.long, y = location.lat),
+             color = "red", alpha = 0.5, size = 1 , stroke = 0.1) +
+  geom_density_2d(data = combined_final_whale_data,
+                  aes(x = location.long, y = location.lat),
+                  color = "yellow", alpha = 2, size = 1) +
+  geom_contour(data = whale.dens, aes(x = Long, y = Lat, z = Density),
+               color = "pink2", size = 1) +   theme(legend.position = "bottom")
+#  coord_map("mercator")
+
+ggplot()+
+  geom_map(data = world_map, map = world_map,
+           aes(long, lat,map_id = region),
+           color = "black", fill = "green4") +
+  geom_point(data = whale,
+             mapping = aes(x = location.long, y = location.lat),
+             color = "red", alpha = 0.5, size = 1 , stroke = 0.1) +
+  geom_density_2d(data = combined_final_whale_data,
+                  aes(x = location.long, y = location.lat),
+                  color = "yellow", alpha = 2, size = 1) +
+  geom_contour(data = whale.dens, aes(x = Long, y = Lat, z = Density),
+               color = "pink2", size = 1)+
+  scale_x_continuous(breaks = seq(-180, 180, 20)) +
+  scale_y_continuous(breaks = seq(-90, 90, 45)) +
+  coord_map("orthographic", orientation = c(10, 260, 0)) +
+  ggtitle("Orthographic Projection of Spherical Density", "Top / Front View") +
+  xlab("") +
+  ylab("") +
+  theme(axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        panel.ontop = TRUE,
+        legend.position = "none",
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        panel.grid = element_line(color = "black" ),
+        panel.background = element_rect(fill = NA))
+
+library(ggplot2)
+library(maps)
+
+plot <- 
+  basemap(data = dt, bathymetry = T, land.col = "green4") +
+  geom_segment(data = combined_final_whale_data,
+               aes(x = location.long, y = location.lat,
+                   xend = location.long + sin(theta * pi/180),
+                   yend = location.lat + cos(theta * pi/180),
+                   color = "blue"),
+               arrow = arrow(length = unit(0.08, "cm"), type = "open", ends = "last"), 
+               size = 0.5, color = "pink") +
+  labs(color = "Whale Direction", ) +
+  theme(legend.position = "bottom")
+print(plot)
+
+head(combined_final_whale_data)
+
+sampled_whale <- combined_final_whale_data[c(1,80,180,480,880,1280,1680,2080,2180,4280,4480,4500,4800),]
+sampled_whale
+
+plot <- 
+  basemap(data = dt, bathymetry = T, land.col = "green4") +
+  geom_segment(data = combined_final_whale_data,
+               aes(x = location.long, y = location.lat,
+                   xend = location.long + sin(theta * pi/180),
+                   yend = location.lat + cos(theta * pi/180),
+                   color = "blue"),
+               arrow = arrow(length = unit(0.2, "cm"), type = "open", ends = "last"),
+               size = 0.5, color = "pink") +
+  geom_point(data = sampled_whale, aes(x = location.long, y = location.lat), size = 5, 
+             color = "red", shape = 19) + # Add this line
+  geom_path(data = sampled_whale,
+            aes(x = location.long, y = location.lat, xend = location.long + 
+                  sin(theta * pi/180),
+                yend = location.lat + cos(theta * pi/180),
+                color = "blue"),
+            arrow = arrow(length = unit(0.5, "cm"), type = "closed", ends = "last"),
+            size = 1 , col= "blue") +
+  labs(color = "Whale Path Direction") +
+  theme(legend.position = "bottom")
+
+plot
+
+
+basemap(data = dt, bathymetry = T, land.col = "green4") +
+  geom_segment(data = sampled_whale,
+               aes(x = location.long, y = location.lat,
+                   xend = location.long + sin(theta * pi/180),
+                   yend = location.lat + cos(theta * pi/180),
+                   color = "blue"),
+               arrow = arrow(length = unit(0.35, "cm"), type = "open", ends = "last"), 
+               size = 1.2, color = "red") +
+  geom_segment(data = sampled_whale,
+               aes(x = location.long, y = location.lat,
+                   xend = location.long + sin(del_solar_azimuth * pi/180),
+                   yend = location.lat + cos(del_solar_azimuth * pi/180),
+                   color = "blue"),
+               arrow = arrow(length = unit(0.29, "cm"), type = "open", ends = "last"), 
+               size = 0.9, color = "#FFFF00") +
+  labs(color = "Whale Direction", ) +
+  theme(legend.position = "bottom")
+
+basemap(data = dt, bathymetry = T, land.col = "green4") +
+  geom_segment(data = sampled_whale,
+               aes(x = location.long, y = location.lat,
+                   xend = location.long + sin(theta * pi/180),
+                   yend = location.lat + cos(theta * pi/180),
+                   color = "blue"),
+               arrow = arrow(length = unit(0.35, "cm"), type = "open", ends = "last"), 
+               size = 1.2, color = "red") +
+  geom_segment(data = sampled_whale,
+               aes(x = location.long, y = location.lat,
+                   xend = location.long + sin(del_lunar_azimuth * pi/180),
+                   yend = location.lat + cos(del_lunar_azimuth * pi/180),
+                   color = "blue"),
+               arrow = arrow(length = unit(0.29, "cm"), type = "open", ends = "last"), 
+               size = 0.9, color = "#FFFF00") +
+  labs(color = "Whale Direction", ) +
+  theme(legend.position = "bottom")
