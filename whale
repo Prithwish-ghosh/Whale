@@ -1,3 +1,11 @@
+require(sf)
+require(tidyverse)
+require(lubridate)
+require(oce)
+require(gganimate)
+require(RColorBrewer)
+require(rerddap)
+
 library(circular)
 library(Directional)
 library(CircStats)
@@ -5,12 +13,12 @@ library(ggplot2)
 library(solarPos)
 library(maps)
 library(ggOceanMaps)
-library(lubridate)
 
-whale = read.csv("D:/Downloads/Blue whales Eastern North Pacific 1993-2008 - Argos Data.csv")
+whale = read.csv("Blue whales Eastern North Pacific 1993-2008 - Argos Data.csv")
 head(whale)
 watson.test(whale$location.long, alpha = 0.01, dist = "vonmises")
 watson.test(whale$location.lat, alpha = 0.01, dist = "vonmises")
+
 
 world_map = map_data("world")
 northern_map <- subset(world_map, long >-180)
@@ -25,7 +33,7 @@ ggplot() +
     color = "black" , fill = "lightblue"
   ) +
   geom_point(
-    data = whale,
+    data = final_whale_data,
     aes(location.long , location.lat , color = "red",
     ) ,
     alpha = 1, size = 0.5
@@ -34,10 +42,7 @@ ggplot() +
 
 whale$timestamp <- as.Date(whale$timestamp)
 
-# Extract year, month, and day components
-whale$year <- format(whale$timestamp, "%Y")
-
-
+whale$year = format(whale$timestamp, "%Y")
 whale$year = as.numeric(whale$year)
 
 # Convert the date string to a POSIXlt object
@@ -54,22 +59,21 @@ whale$Annualized_time = (whale$year + whale$yearly_date)
 whale$Annualized_time
 whale$height = 0
 library(wmm)
-head(whale)
+
 dim(whale)
 
-whale_data = whale[,c(3:5,22, 23,26)]
-head(whale_data)
+whale_data = whale[,c(3:5,22,25, 26)]
+tail(whale_data)
 dim(whale_data)
 library(lubridate)
-filtered_whale_data <-  subset(whale_data, whale_data$year >= 2005 & whale_data$year <= 2010)
-
+filtered_whale_data <-  subset(whale_data, whale_data$year>= 2005 & whale_data$year <= 2010)
+head(filtered_whale_data)
 # Print the filtered dataset
 print(filtered_whale_data)
 summary(filtered_whale_data)
 dim(filtered_whale_data)
 
 head(filtered_whale_data)
-dim(filtered_whale_data)
 
 mag = list()
 for (i in 1:8326) {
@@ -88,8 +92,24 @@ head(magnetic_dta)
 combined_final_whale_data = cbind(filtered_whale_data, magnetic_dta)
 tail(combined_final_whale_data)
 
+head(whale)
 
-combined_final_whale_data <- combined_final_whale_data[combined_final_whale_data$location.long <= 0, ]
+ggplot() +
+  geom_map(
+    data = northern_map3,map = northern_map3,
+    aes(long, lat , map_id = region),
+    color = "black" , fill = "lightblue"
+  ) +
+  geom_point(
+    data = whale_data,
+    aes(location.long , location.lat , color = "red",
+    ) ,
+    alpha = 1, size = 0.5
+  ) +
+  theme(legend.position = "top")
+
+combined_final_whale_data <- combined_final_whale_data[combined_final_whale_data$location.long <= -75, ]
+dim(combined_final_whale_data)
 
 get_initial_bearing <- function(longA, latA, longB, latB) {
   delta_long <- longB - longA
@@ -103,7 +123,7 @@ get_initial_bearing <- function(longA, latA, longB, latB) {
 }
 dim(combined_final_whale_data)
 
-for ( i in 1:8324) {
+for ( i in 1:8323) {
   combined_final_whale_data$theta[i] = 
     get_initial_bearing(combined_final_whale_data$location.long[i] ,
                         combined_final_whale_data$location.lat[i],
@@ -117,253 +137,592 @@ tail(combined_final_whale_data)
 combined_final_whale_data$i = as.numeric(combined_final_whale_data$i)
 combined_final_whale_data$d = as.numeric(combined_final_whale_data$d)
 
-for ( i in 1:8324) {
+for ( i in 1:8323) {
   combined_final_whale_data$del_i[i] = 
     (combined_final_whale_data$i[i+1] -  
        combined_final_whale_data$i[i])
 }
 
-for ( i in 1:8324) {
+for ( i in 1:8323) {
   combined_final_whale_data$del_d[i] = 
     (combined_final_whale_data$d[i+1] -  
        combined_final_whale_data$d[i])
 }
 
+dim(combined_final_whale_data)
+combined_final_whale_data
+final_whale_data <- combined_final_whale_data[combined_final_whale_data$location.long <= -75, ]
+dim(final_whale_data)
 
-fit1 = lm.circular(combined_final_whale_data$theta, combined_final_whale_data$del_i)
-fit1$rho
+summary(final_whale_data)
 
-fit2 = lm.circular(combined_final_whale_data$theta, combined_final_whale_data$del_d)
-fit2$rho
+f_d <- final_whale_data %>%
+  mutate(Year = year(timestamp))
+
+partitioned_data_y_whale <- split(f_d, f_d$Year)
+
+summary(partitioned_data_y_whale[[1]])
+dim(partitioned_data_y_whale[[3]])
+
+final_whale_data1 = final_whale_data[1:500,]
+
+############ Ocean Currents ###################
+
+geoinfo = info("erdTAgeo1day_LonPM180")
+geoinfo$base_url
+geoinfo$alldata
+lon = c(-157.11,-92.97)
+lat =  c(8.445, 49.331)
+## set temperal extent
+time = c("2005-01-01", "2005-12-30")
+
+## download the data
+geostrophic = griddap(geoinfo, longitude = lon, latitude = lat, 
+                      time = time, fields = c("u_current", "v_current"))
+
+
+
+summary(geostrophic$data)
+dim(geostrophic$data)
+geostrophic$data$v_current
+
+datat_2005 = na.omit(geostrophic$data)
+dim(datat_2005)
+
+datat_2005$vel = sqrt(datat_2005$v_current^2 + datat_2005$u_current^2)
+datat_2005$time = as.Date(datat_2005$time)
+
+lon = c(-135,-92.49)
+lat =  c(6.339, 49.324)
+## set temperal extent
+time = c("2006-01-01", "2006-12-30")
+
+## download the data
+geostrophic = griddap(geoinfo, longitude = lon, latitude = lat, 
+                      time = time, fields = c("u_current", "v_current"))
+
+
+
+summary(geostrophic$data)
+dim(geostrophic$data)
+geostrophic$data$v_current
+
+datat_2006 = na.omit(geostrophic$data)
+dim(datat_2006)
+
+datat_2006$vel = sqrt(datat_2006$v_current^2 + datat_2006$u_current^2)
+datat_2006$time = as.Date(datat_2006$time)
+
+lon = c(-150,-88.35)
+lat =  c(5.514, 53.148)
+## set temperal extent
+time = c("2007-01-01", "2007-12-30")
+
+## download the data
+geostrophic = griddap(geoinfo, longitude = lon, latitude = lat, 
+                      time = time, fields = c("u_current", "v_current"))
+
+
+
+summary(geostrophic$data)
+dim(geostrophic$data)
+geostrophic$data$v_current
+
+datat_2007 = na.omit(geostrophic$data)
+dim(datat_2007)
+
+datat_2007$vel = sqrt(datat_2007$v_current^2 + datat_2007$u_current^2)
+datat_2007$time = as.Date(datat_2007$time)
+
+lon = c(-153.99,-85.38)
+lat =  c(6.244, 48.463)
+## set temperal extent
+time = c("2008-01-01", "2008-12-30")
+
+## download the data
+geostrophic = griddap(geoinfo, longitude = lon, latitude = lat, 
+                      time = time, fields = c("u_current", "v_current"))
+
+
+
+summary(geostrophic$data)
+dim(geostrophic$data)
+geostrophic$data$v_current
+
+datat_2008 = na.omit(geostrophic$data)
+dim(datat_2008)
+
+datat_2008$vel = sqrt(datat_2008$v_current^2 + datat_2008$u_current^2)
+datat_2008$time = as.Date(datat_2008$time)
+
+lon = c(-146.3,-106.2)
+lat =  c(10.90, 30.19)
+## set temperal extent
+time = c("2009-01-01", "2009-04-01")
+
+## download the data
+geostrophic = griddap(geoinfo, longitude = lon, latitude = lat, 
+                      time = time, fields = c("u_current", "v_current"))
+
+
+
+summary(geostrophic$data)
+dim(geostrophic$data)
+geostrophic$data$v_current
+
+datat_2009 = na.omit(geostrophic$data)
+dim(datat_2009)
+
+datat_2009$vel = sqrt(datat_2009$v_current^2 + datat_2009$u_current^2)
+datat_2009$time = as.Date(datat_2009$time)
+
+summary(final_whale_data)
+dim(partitioned_data_y_whale[[1]])
+dim(datat_2005)
+library(geosphere)
+
+library(sf)
+
+dataset_list_2005 = c()
+
+for (i in 1:1822) {
+  primary_lat <- partitioned_data_y_whale[[1]][i,]$location.lat
+  primary_lon <- partitioned_data_y_whale[[1]][i,]$location.long
+  
+  # Sample dataset (replace this with your own data)
+  data <- datat_2005
+  
+  # Calculate distances between each point and the primary point
+  distances <- distVincentySphere(
+    p1 = c(primary_lon, primary_lat),
+    p2 = data[, c("longitude", "latitude")]
+  )
+  # Create a new dataset with points within 10 kilometers of the primary point
+  threshold_distance_km <- 20
+  filtered_data <- datat_2005[distances < threshold_distance_km * 1000, ]
+  #filtered_data[[i]] <- data[distances < threshold_distance_km * 1000, ]
+  # Give each dataset a unique name based on the loop index
+  #dataset_name <- paste("filtered_data", i, sep = "_")
+  #assign(dataset_name, filtered_data)
+  dataset_list_2005[[i]] <- filtered_data
+}
+
+dataset_list_2006 = c()
+
+for (i in 1:914) {
+  primary_lat <- partitioned_data_y_whale[[2]][i,]$location.lat
+  primary_lon <- partitioned_data_y_whale[[2]][i,]$location.long
+  
+  # Sample dataset (replace this with your own data)
+  data <- datat_2006
+  
+  # Calculate distances between each point and the primary point
+  distances <- distVincentySphere(
+    p1 = c(primary_lon, primary_lat),
+    p2 = data[, c("longitude", "latitude")]
+  )
+  # Create a new dataset with points within 10 kilometers of the primary point
+  threshold_distance_km <- 20
+  filtered_data <- datat_2006[distances < threshold_distance_km * 1000, ]
+  #filtered_data[[i]] <- data[distances < threshold_distance_km * 1000, ]
+  # Give each dataset a unique name based on the loop index
+  #dataset_name <- paste("filtered_data", i, sep = "_")
+  #assign(dataset_name, filtered_data)
+  dataset_list_2006[[i]] <- filtered_data
+}
+
+
+dataset_list_2007 = c()
+
+for (i in 1:2048) {
+  primary_lat <- partitioned_data_y_whale[[3]][i,]$location.lat
+  primary_lon <- partitioned_data_y_whale[[3]][i,]$location.long
+  
+  # Sample dataset (replace this with your own data)
+  data <- datat_2007
+  
+  # Calculate distances between each point and the primary point
+  distances <- distVincentySphere(
+    p1 = c(primary_lon, primary_lat),
+    p2 = data[, c("longitude", "latitude")]
+  )
+  # Create a new dataset with points within 10 kilometers of the primary point
+  threshold_distance_km <- 20
+  filtered_data <- datat_2007[distances < threshold_distance_km * 1000, ]
+  #filtered_data[[i]] <- data[distances < threshold_distance_km * 1000, ]
+  # Give each dataset a unique name based on the loop index
+  #dataset_name <- paste("filtered_data", i, sep = "_")
+  #assign(dataset_name, filtered_data)
+  dataset_list_2007[[i]] <- filtered_data
+}
+
+dataset_list_2008 = c()
+
+for (i in 1:3316) {
+  primary_lat <- partitioned_data_y_whale[[4]][i,]$location.lat
+  primary_lon <- partitioned_data_y_whale[[4]][i,]$location.long
+  
+  # Sample dataset (replace this with your own data)
+  data <- datat_2008
+  
+  # Calculate distances between each point and the primary point
+  distances <- distVincentySphere(
+    p1 = c(primary_lon, primary_lat),
+    p2 = data[, c("longitude", "latitude")]
+  )
+  # Create a new dataset with points within 10 kilometers of the primary point
+  threshold_distance_km <- 20
+  filtered_data <- datat_2008[distances < threshold_distance_km * 1000, ]
+  #filtered_data[[i]] <- data[distances < threshold_distance_km * 1000, ]
+  # Give each dataset a unique name based on the loop index
+  #dataset_name <- paste("filtered_data", i, sep = "_")
+  #assign(dataset_name, filtered_data)
+  dataset_list_2008[[i]] <- filtered_data
+}
+
+dataset_list_2009 = c()
+
+for (i in 1:223) {
+  primary_lat <- partitioned_data_y_whale[[5]][i,]$location.lat
+  primary_lon <- partitioned_data_y_whale[[5]][i,]$location.long
+  
+  # Sample dataset (replace this with your own data)
+  data <- datat_2009
+  
+  # Calculate distances between each point and the primary point
+  distances <- distVincentySphere(
+    p1 = c(primary_lon, primary_lat),
+    p2 = data[, c("longitude", "latitude")]
+  )
+  # Create a new dataset with points within 10 kilometers of the primary point
+  threshold_distance_km <- 20
+  filtered_data <- datat_2009[distances < threshold_distance_km * 1000, ]
+  #filtered_data[[i]] <- data[distances < threshold_distance_km * 1000, ]
+  # Give each dataset a unique name based on the loop index
+  #dataset_name <- paste("filtered_data", i, sep = "_")
+  #assign(dataset_name, filtered_data)
+  dataset_list_2009[[i]] <- filtered_data
+}
+
+dim(partitioned_data_y_whale[[5]])
+
+partitioned_data_y_whale[[5]]$timestamp = as.Date(partitioned_data_y_whale[[5]]$timestamp)
+
+final_list_2009 = c()
+
+for (i in 1:223) {
+  primary_data <- data.frame(primary_date = as.Date(partitioned_data_y_whale[[5]][i,]$timestamp))
+  #primary_data
+  # Sample dataset with other parameters (replace with your actual dataset)
+  dataset <- dataset_list_2009[[i]]
+  
+  # Find the nearest date in the dataset for each date in primary_data
+  nearest_rows <- lapply( primary_data$primary_date, function(x) {
+    #closest_row <- dataset[which.min(abs(as.Date(dataset$date) - x)), ]
+    #closest_row <- dataset[which.min(abs(as.Date(dataset$date) - x) <= 365), ]
+    dataset$diff_days <- abs(dataset$time - x)
+    filtered_data <- dataset[abs(dataset$time - x) <= 365, ]
+    # Sort the filtered data by date difference in ascending order
+    sorted_data <- filtered_data[order(filtered_data$diff_days), ]
+    return(sorted_data[1,])
+  })
+  
+  # Create a new dataframe with the nearest rows
+  nearest_data <- do.call(rbind, nearest_rows)
+  dataset_name <- paste("final_data", i, sep = "_")
+  assign(dataset_name, nearest_data)
+  final_list_2009[[i]] <- nearest_data
+}
+
+final_list_2009
+
+library(lubridate)
+library(data.table)
+
+result_2009 = rbindlist(final_list_2009)
+dim(result_2009)
+summary(result_2009)
+
+dataset_2009 = cbind(partitioned_data_y_whale[[5]], result_2009)
+
+head(dataset_2009)
+tail(dataset_2009)
+summary(dataset_2009)
+
+data_whale_2009 = na.omit(dataset_2009)
+dim(data_whale_2009)
+
+###############################################################
+dim(partitioned_data_y_whale[[4]])
+final_list_2008 = c()
+
+for (i in 1:3316) {
+  primary_data <- data.frame(primary_date = as.Date(partitioned_data_y_whale[[4]][i,]$timestamp))
+  #primary_data
+  # Sample dataset with other parameters (replace with your actual dataset)
+  dataset <- dataset_list_2008[[i]]
+  
+  # Find the nearest date in the dataset for each date in primary_data
+  nearest_rows <- lapply( primary_data$primary_date, function(x) {
+    #closest_row <- dataset[which.min(abs(as.Date(dataset$date) - x)), ]
+    #closest_row <- dataset[which.min(abs(as.Date(dataset$date) - x) <= 365), ]
+    dataset$diff_days <- abs(dataset$time - x)
+    filtered_data <- dataset[abs(dataset$time - x) <= 365, ]
+    # Sort the filtered data by date difference in ascending order
+    sorted_data <- filtered_data[order(filtered_data$diff_days), ]
+    return(sorted_data[1,])
+  })
+  
+  # Create a new dataframe with the nearest rows
+  nearest_data <- do.call(rbind, nearest_rows)
+  dataset_name <- paste("final_data", i, sep = "_")
+  assign(dataset_name, nearest_data)
+  final_list_2008[[i]] <- nearest_data
+}
+
+result_2008 = rbindlist(final_list_2008)
+dim(result_2008)
+summary(result_2008)
+
+dataset_2008 = cbind(partitioned_data_y_whale[[4]], result_2008)
+
+dim(dataset_2008)
+tail(dataset_2008)
+summary(dataset_2008)
+
+data_whale_2008 = na.omit(dataset_2008)
+dim(data_whale_2008)
+
+###############################################################
+dim(partitioned_data_y_whale[[3]])
+final_list_2007 = c()
+
+for (i in 1:2048) {
+  primary_data <- data.frame(primary_date = as.Date(partitioned_data_y_whale[[3]][i,]$timestamp))
+  #primary_data
+  # Sample dataset with other parameters (replace with your actual dataset)
+  dataset <- dataset_list_2007[[i]]
+  
+  # Find the nearest date in the dataset for each date in primary_data
+  nearest_rows <- lapply( primary_data$primary_date, function(x) {
+    #closest_row <- dataset[which.min(abs(as.Date(dataset$date) - x)), ]
+    #closest_row <- dataset[which.min(abs(as.Date(dataset$date) - x) <= 365), ]
+    dataset$diff_days <- abs(dataset$time - x)
+    filtered_data <- dataset[abs(dataset$time - x) <= 365, ]
+    # Sort the filtered data by date difference in ascending order
+    sorted_data <- filtered_data[order(filtered_data$diff_days), ]
+    return(sorted_data[1,])
+  })
+  
+  # Create a new dataframe with the nearest rows
+  nearest_data <- do.call(rbind, nearest_rows)
+  dataset_name <- paste("final_data", i, sep = "_")
+  assign(dataset_name, nearest_data)
+  final_list_2007[[i]] <- nearest_data
+}
+
+result_2007 = rbindlist(final_list_2007)
+dim(result_2007)
+summary(result_2007)
+
+dataset_2007 = cbind(partitioned_data_y_whale[[3]], result_2007)
+
+dim(dataset_2007)
+tail(dataset_2007)
+summary(dataset_2007)
+
+data_whale_2007 = na.omit(dataset_2007)
+dim(data_whale_2007)
+
+
+###############################################################
+dim(partitioned_data_y_whale[[2]])
+final_list_2006 = c()
+
+for (i in 1:914) {
+  primary_data <- data.frame(primary_date = as.Date(partitioned_data_y_whale[[2]][i,]$timestamp))
+  #primary_data
+  # Sample dataset with other parameters (replace with your actual dataset)
+  dataset <- dataset_list_2006[[i]]
+  
+  # Find the nearest date in the dataset for each date in primary_data
+  nearest_rows <- lapply( primary_data$primary_date, function(x) {
+    #closest_row <- dataset[which.min(abs(as.Date(dataset$date) - x)), ]
+    #closest_row <- dataset[which.min(abs(as.Date(dataset$date) - x) <= 365), ]
+    dataset$diff_days <- abs(dataset$time - x)
+    filtered_data <- dataset[abs(dataset$time - x) <= 365, ]
+    # Sort the filtered data by date difference in ascending order
+    sorted_data <- filtered_data[order(filtered_data$diff_days), ]
+    return(sorted_data[1,])
+  })
+  
+  # Create a new dataframe with the nearest rows
+  nearest_data <- do.call(rbind, nearest_rows)
+  dataset_name <- paste("final_data", i, sep = "_")
+  assign(dataset_name, nearest_data)
+  final_list_2006[[i]] <- nearest_data
+}
+
+result_2006 = rbindlist(final_list_2006)
+dim(result_2006)
+summary(result_2006)
+
+dataset_2006 = cbind(partitioned_data_y_whale[[2]], result_2006)
+
+dim(dataset_2006)
+tail(dataset_2006)
+summary(dataset_2006)
+
+data_whale_2006 = na.omit(dataset_2006)
+dim(data_whale_2006)
+
+###############################################################
+dim(partitioned_data_y_whale[[1]])
+final_list_2005 = c()
+
+for (i in 1:1822) {
+  primary_data <- data.frame(primary_date = as.Date(partitioned_data_y_whale[[1]][i,]$timestamp))
+  #primary_data
+  # Sample dataset with other parameters (replace with your actual dataset)
+  dataset <- dataset_list_2005[[i]]
+  
+  # Find the nearest date in the dataset for each date in primary_data
+  nearest_rows <- lapply( primary_data$primary_date, function(x) {
+    #closest_row <- dataset[which.min(abs(as.Date(dataset$date) - x)), ]
+    #closest_row <- dataset[which.min(abs(as.Date(dataset$date) - x) <= 365), ]
+    dataset$diff_days <- abs(dataset$time - x)
+    filtered_data <- dataset[abs(dataset$time - x) <= 365, ]
+    # Sort the filtered data by date difference in ascending order
+    sorted_data <- filtered_data[order(filtered_data$diff_days), ]
+    return(sorted_data[1,])
+  })
+  
+  # Create a new dataframe with the nearest rows
+  nearest_data <- do.call(rbind, nearest_rows)
+  dataset_name <- paste("final_data", i, sep = "_")
+  assign(dataset_name, nearest_data)
+  final_list_2005[[i]] <- nearest_data
+}
+
+result_2005 = rbindlist(final_list_2005)
+dim(result_2005)
+summary(result_2005)
+
+dataset_2005 = cbind(partitioned_data_y_whale[[1]], result_2005)
+
+dim(dataset_2005)
+tail(dataset_2005)
+summary(dataset_2005)
+
+data_whale_2005 = na.omit(dataset_2005)
+dim(data_whale_2005)
+
+###############################################################
+
+blue_whale = rbind(data_whale_2005, data_whale_2006, data_whale_2007, data_whale_2008, data_whale_2009)
+
+head(blue_whale)
+dim(blue_whale)
+blue_whale = as.data.frame(blue_whale)
+
+blue_whale$i = as.numeric(blue_whale$f)
+summary(blue_whale)
+
+library(noaaoceans)
+station_df <- list_coops_stations()
+View(station_df)
+
+
+write.csv(blue_whale, file = "blue_whale.csv", row.names = FALSE)
+
+###############################################################
 
 library(solarPos)
-combined_final_whale_data$month <- format(combined_final_whale_data$timestamp, "%m")
-combined_final_whale_data$day <- format(combined_final_whale_data$timestamp, "%d")
+blue_whale$month <- format(blue_whale$timestamp, "%m")
+blue_whale$day <- format(blue_whale$timestamp, "%d")
 
-combined_final_whale_data$year = as.numeric(combined_final_whale_data$year)
-combined_final_whale_data$month = as.numeric(combined_final_whale_data$month)
-combined_final_whale_data$day = as.numeric(combined_final_whale_data$day)
+blue_whale$year = as.numeric(blue_whale$year)
+blue_whale$month = as.numeric(blue_whale$month)
+blue_whale$day = as.numeric(blue_whale$day)
 
-combined_final_whale_data$jd = solarPos::julianDay(
-  combined_final_whale_data$year, combined_final_whale_data$month, 
-  combined_final_whale_data$day
+
+blue_whale$jd = solarPos::julianDay(
+  blue_whale$year, blue_whale$month, 
+  blue_whale$day
 )
 
-x = solarPos::solarPosition(combined_final_whale_data$jd,
-                            combined_final_whale_data$location.long,
-                            combined_final_whale_data$location.lat
+x = solarPos::solarPosition(blue_whale$jd,
+                            blue_whale$location.long,
+                            blue_whale$location.lat
 )
 head(x)
 x = data.frame(x)
 
-combined_final_whale_data$azimuth = x$azimuth
-combined_final_whale_data$zenith = x$zenith
+blue_whale$solar_azimuth = x$azimuth
+blue_whale$solar_zenith = x$zenith
 
-for ( i in 1:8324) {
-  combined_final_whale_data$del_solar_azimuth[i] = 
-    (combined_final_whale_data$azimuth[i+1] -  
-       combined_final_whale_data$azimuth[i])
+dim(blue_whale)
+
+for ( i in 1:7420) {
+  blue_whale$del_solar_azimuth[i] = 
+    (blue_whale$solar_azimuth[i+1] -  
+       blue_whale$solar_azimuth[i])
 }
 
-for ( i in 1:8324) {
-  combined_final_whale_data$del_solar_zenith[i] = 
-    (combined_final_whale_data$zenith[i+1] -  
-       combined_final_whale_data$zenith[i])
+for ( i in 1:7420) {
+  blue_whale$del_solar_zenith[i] = 
+    (blue_whale$solar_zenith[i+1] -  
+       blue_whale$solar_zenith[i])
 }
 
-
-fit3 = lm.circular(combined_final_whale_data$theta, combined_final_whale_data$del_solar_azimuth)
-fit4 = lm.circular(combined_final_whale_data$theta, combined_final_whale_data$del_solar_zenith)
-
-
-fit3$rho
-fit4$rho
 
 library(suncalc)
-data = data.frame(date = combined_final_whale_data$timestamp
-                  , lat = combined_final_whale_data$location.lat ,
-                  lon = combined_final_whale_data$location.long)
+data = data.frame(date = blue_whale$timestamp
+                  , lat = blue_whale$location.lat ,
+                  lon = blue_whale$location.long)
 s = suncalc::getMoonPosition(data = data, keep = c("azimuth"))
 
-combined_final_whale_data$moon_pos = s$azimuth
+blue_whale$moon_pos = s$azimuth
 
-for ( i in 1:8324) {
-  combined_final_whale_data$del_lunar_azimuth[i] = 
-    (combined_final_whale_data$moon_pos[i+1] -  
-       combined_final_whale_data$moon_pos[i])
+for ( i in 1:7420) {
+  blue_whale$del_lunar_azimuth[i] = 
+    (blue_whale$moon_pos[i+1] -  
+       blue_whale$moon_pos[i])
 }
 
-fit5 = lm.circular(combined_final_whale_data$theta, combined_final_whale_data$del_lunar_azimuth)
+head(blue_whale)
+dim(blue_whale)
+blue_whale$Angle_of_incidence = atan(blue_whale$u_current/blue_whale$v_current)
+head(blue_whale)
+
+write.csv(blue_whale, file = "blue_whale.csv", row.names = FALSE)
+
+watson.test(blue_whale$Angle_of_incidence, alpha = 0.01, dist = "vonmises")
+
+fit1 = lm.circular(blue_whale$theta, blue_whale$del_i)
+fit1$rho
+
+fit2 = lm.circular(blue_whale$theta, blue_whale$del_d)
+fit2$rho
+
+fit3 = lm.circular(blue_whale$theta, blue_whale$del_solar_azimuth)
+fit3$rho
+
+fit4 = lm.circular(blue_whale$theta, blue_whale$del_solar_zenith)
+fit4$rho
+
+fit5 = lm.circular(blue_whale$theta, blue_whale$del_lunar_azimuth)
 fit5$rho
 
-
-summary(combined_final_whale_data)
-watson.test(combined_final_whale_data$location.long, alpha = 0.01, dist = "vonmises")
-watson.test(combined_final_whale_data$location.lat, alpha = 0.01, dist = "vonmises")
-watson.test(combined_final_whale_data$azimuth, alpha = 0.01, dist = "vonmises")
-watson.test(combined_final_whale_data$zenith, alpha = 0.01, dist = "vonmises")
-watson.test(combined_final_whale_data$moon_pos, alpha = 0.01, dist = "vonmises")
-watson.test(combined_final_whale_data$theta, alpha = 0.01, dist = "vonmises")
-watson.test(combined_final_whale_data$i, alpha = 0.01, dist = "vonmises")
-watson.test(combined_final_whale_data$d, alpha = 0.01, dist = "vonmises")
-
-remotes::install_github("MikkoVihtakari/ggOceanMaps")
-library(ggOceanMaps)
-
-dt <- data.frame(lon = combined_final_whale_data$location.long,
-                 lat = combined_final_whale_data$location.lat)
-
-basemap(data = dt, bathymetry = T, land.col = "green4") + 
-  geom_point(data = transform_coord(dt), aes(x = lon, y = lat), 
-             color = "red", fill = NA, size = 1)+
-  theme(legend.position = "bottom")
+fit6 = lm.circular(blue_whale$theta, blue_whale$Angle_of_incidence)
+fit6$rho
 
 
-dd = cbind(combined_final_whale_data$location.lat, combined_final_whale_data$location.long)
-
-library(movMF)
-
-Evmf <- function(K){
-  movMF(dd, k= K, control = list(nruns = 20))
-}
-
-set.seed(123)
-Esd = lapply(1:10, Evmf)
-Esd
-sapply(Esd, BIC)
-
-# nOW WE USE 16000 SAMPLES TO PLOT
-
-vmf_density_grid = function(u, ngrid = 100){
-  u[,1] <- u[,1] + 90
-  u[,2] <- u[,2] +180
-  res <- vmf.kerncontour(u, thumb = "none", den.ret = T, full = T,
-                         ngrid = ngrid)
-  ret <- expand.grid(Lat = res$lat - 90, Long = res$long - 180)
-  ret$Density <- c(res$den)
-  ret
-}
-
-
-whale.dens = vmf_density_grid(dd, ngrid = 300)
-
-
-
-basemap(data = dt, bathymetry = T, land.col = "green4") +
-  geom_point(data = combined_final_whale_data,
-             mapping = aes(x = location.long, y = location.lat),
-             color = "red", alpha = 0.5, size = 1 , stroke = 0.1) +
-  geom_density_2d(data = combined_final_whale_data,
-                  aes(x = location.long, y = location.lat),
-                  color = "yellow", alpha = 2, size = 1) +
-  geom_contour(data = whale.dens, aes(x = Long, y = Lat, z = Density),
-               color = "pink2", size = 1) +   theme(legend.position = "bottom")
-#  coord_map("mercator")
-
-ggplot()+
-  geom_map(data = world_map, map = world_map,
-           aes(long, lat,map_id = region),
-           color = "black", fill = "green4") +
-  geom_point(data = whale,
-             mapping = aes(x = location.long, y = location.lat),
-             color = "red", alpha = 0.5, size = 1 , stroke = 0.1) +
-  geom_density_2d(data = combined_final_whale_data,
-                  aes(x = location.long, y = location.lat),
-                  color = "yellow", alpha = 2, size = 1) +
-  geom_contour(data = whale.dens, aes(x = Long, y = Lat, z = Density),
-               color = "pink2", size = 1)+
-  scale_x_continuous(breaks = seq(-180, 180, 20)) +
-  scale_y_continuous(breaks = seq(-90, 90, 45)) +
-  coord_map("orthographic", orientation = c(10, 260, 0)) +
-  ggtitle("Orthographic Projection of Spherical Density", "Top / Front View") +
-  xlab("") +
-  ylab("") +
-  theme(axis.ticks = element_blank(),
-        axis.text = element_blank(),
-        panel.ontop = TRUE,
-        legend.position = "none",
-        plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5),
-        panel.grid = element_line(color = "black" ),
-        panel.background = element_rect(fill = NA))
-
-library(ggplot2)
-library(maps)
-
-plot <- 
-  basemap(data = dt, bathymetry = T, land.col = "green4") +
-  geom_segment(data = combined_final_whale_data,
-               aes(x = location.long, y = location.lat,
-                   xend = location.long + sin(theta * pi/180),
-                   yend = location.lat + cos(theta * pi/180),
-                   color = "blue"),
-               arrow = arrow(length = unit(0.08, "cm"), type = "open", ends = "last"), 
-               size = 0.5, color = "pink") +
-  labs(color = "Whale Direction", ) +
-  theme(legend.position = "bottom")
-print(plot)
-
-head(combined_final_whale_data)
-
-sampled_whale <- combined_final_whale_data[c(1,80,180,480,880,1280,1680,2080,2180,4280,4480,4500,4800),]
-sampled_whale
-
-plot <- 
-  basemap(data = dt, bathymetry = T, land.col = "green4") +
-  geom_segment(data = combined_final_whale_data,
-               aes(x = location.long, y = location.lat,
-                   xend = location.long + sin(theta * pi/180),
-                   yend = location.lat + cos(theta * pi/180),
-                   color = "blue"),
-               arrow = arrow(length = unit(0.2, "cm"), type = "open", ends = "last"),
-               size = 0.5, color = "pink") +
-  geom_point(data = sampled_whale, aes(x = location.long, y = location.lat), size = 5, 
-             color = "red", shape = 19) + # Add this line
-  geom_path(data = sampled_whale,
-            aes(x = location.long, y = location.lat, xend = location.long + 
-                  sin(theta * pi/180),
-                yend = location.lat + cos(theta * pi/180),
-                color = "blue"),
-            arrow = arrow(length = unit(0.5, "cm"), type = "closed", ends = "last"),
-            size = 1 , col= "blue") +
-  labs(color = "Whale Path Direction") +
-  theme(legend.position = "bottom")
-
-plot
-
-
-basemap(data = dt, bathymetry = T, land.col = "green4") +
-  geom_segment(data = sampled_whale,
-               aes(x = location.long, y = location.lat,
-                   xend = location.long + sin(theta * pi/180),
-                   yend = location.lat + cos(theta * pi/180),
-                   color = "blue"),
-               arrow = arrow(length = unit(0.35, "cm"), type = "open", ends = "last"), 
-               size = 1.2, color = "red") +
-  geom_segment(data = sampled_whale,
-               aes(x = location.long, y = location.lat,
-                   xend = location.long + sin(del_solar_azimuth * pi/180),
-                   yend = location.lat + cos(del_solar_azimuth * pi/180),
-                   color = "blue"),
-               arrow = arrow(length = unit(0.29, "cm"), type = "open", ends = "last"), 
-               size = 0.9, color = "#FFFF00") +
-  labs(color = "Whale Direction", ) +
-  theme(legend.position = "bottom")
-
-basemap(data = dt, bathymetry = T, land.col = "green4") +
-  geom_segment(data = sampled_whale,
-               aes(x = location.long, y = location.lat,
-                   xend = location.long + sin(theta * pi/180),
-                   yend = location.lat + cos(theta * pi/180),
-                   color = "blue"),
-               arrow = arrow(length = unit(0.35, "cm"), type = "open", ends = "last"), 
-               size = 1.2, color = "red") +
-  geom_segment(data = sampled_whale,
-               aes(x = location.long, y = location.lat,
-                   xend = location.long + sin(del_lunar_azimuth * pi/180),
-                   yend = location.lat + cos(del_lunar_azimuth * pi/180),
-                   color = "blue"),
-               arrow = arrow(length = unit(0.29, "cm"), type = "open", ends = "last"), 
-               size = 0.9, color = "#FFFF00") +
-  labs(color = "Whale Direction", ) +
-  theme(legend.position = "bottom")
+watson.test(blue_whale$location.long, alpha = 0.01, dist = "vonmises")
+watson.test(blue_whale$location.lat, alpha = 0.01, dist = "vonmises")
+watson.test(blue_whale$solar_azimuth, alpha = 0.01, dist = "vonmises")
+watson.test(blue_whale$solar_zenith, alpha = 0.01, dist = "vonmises")
+watson.test(blue_whale$moon_pos, alpha = 0.01, dist = "vonmises")
+watson.test(blue_whale$theta, alpha = 0.01, dist = "vonmises")
+watson.test(blue_whale$i, alpha = 0.01, dist = "vonmises")
+watson.test(blue_whale$d, alpha = 0.01, dist = "vonmises")
